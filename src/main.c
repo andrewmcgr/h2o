@@ -106,6 +106,10 @@
 #define H2O_HAS_PTHREAD_SETAFFINITY_NP 1
 #endif
 
+#ifndef IPPROTO_MPTCP
+#define IPPROTO_MPTCP 262
+#endif
+
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
 
 #define H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS 10
@@ -1575,8 +1579,9 @@ static void socket_reuseport(int fd)
 static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
+    int actual_protocol = (domain == AF_INET && type == SOCK_STREAM) ? IPPROTO_MPTCP : protocol;
 
-    if ((fd = socket(domain, type, protocol)) == -1)
+    if ((fd = socket(domain, type, actual_protocol)) == -1)
         goto Error;
     set_cloexec(fd);
 
@@ -1616,7 +1621,8 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     /* TCP-specific actions */
     if (protocol == IPPROTO_TCP) {
 #ifdef TCP_DEFER_ACCEPT
-        { /* set TCP_DEFER_ACCEPT */
+        if (actual_protocol == IPPROTO_TCP) {
+            /* set TCP_DEFER_ACCEPT */
             int flag = 1;
             if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
                 goto Error;
